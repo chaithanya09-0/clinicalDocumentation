@@ -119,12 +119,19 @@
               <div class="transcript-toolbar">
                 <button id="raw-transcript-btn" class="tab-btn active">Raw Text</button>
                 <button id="clean-transcript-btn" class="tab-btn">Cleaned & Formatted Dialogue</button>
+                <button id="edit-transcript-toggle-btn" class="tab-btn"><i class="fa-solid fa-pen-to-square"></i> Paste / Edit</button>
+              </div>
+
+              <textarea id="transcript-editor-input" class="form-control hidden" style="min-height: 220px; font-size: 13px; line-height: 1.6; resize: vertical; margin-bottom: 8px;" placeholder="Type or paste doctor-patient consultation dialogue here...&#10;Doctor: Hello, how are you?&#10;Patient: I have had a headache for 3 days."></textarea>
+              <div id="editor-actions-bar" class="hidden mb-3">
+                <button id="apply-edited-transcript-btn" class="btn btn-primary btn-sm"><i class="fa-solid fa-check"></i> Apply & Format Dialogue</button>
+                <button id="cancel-edit-btn" class="btn btn-outline btn-sm ml-2">Cancel</button>
               </div>
 
               <div id="transcript-display" class="transcript-container">
                 <div class="empty-state">
                   <i class="fa-solid fa-comment-medical"></i>
-                  <p>Upload or load an audio file and click "Run Whisper Speech Recognition" to view the transcript here.</p>
+                  <p>Upload or load an audio file and click "Run Whisper Speech Recognition" to view the transcript here, or click "Paste / Edit" to enter text directly.</p>
                 </div>
               </div>
 
@@ -163,6 +170,19 @@
               </div>
             </div>
             <div class="card-body">
+              <!-- Active Transcript Source Preview Box -->
+              <div id="transcript-preview-box" class="transcript-preview-card hidden">
+                <div class="transcript-preview-header">
+                  <span style="font-size: 13px; font-weight: 600; color: var(--accent);">
+                    <i class="fa-solid fa-file-waveform"></i> Active Consultation Transcript Source:
+                  </span>
+                  <button id="edit-transcript-src-btn" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                    <i class="fa-solid fa-pen"></i> Edit in Tab 1
+                  </button>
+                </div>
+                <div id="transcript-preview-content" class="transcript-preview-text"></div>
+              </div>
+
               <!-- Report Render Box -->
               <div id="report-view-container">
                 <div class="empty-state">

@@ -50,6 +50,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const transcriptDisplay = document.getElementById("transcript-display");
   const rawTranscriptBtn = document.getElementById("raw-transcript-btn");
   const cleanTranscriptBtn = document.getElementById("clean-transcript-btn");
+  const editTranscriptToggleBtn = document.getElementById("edit-transcript-toggle-btn");
+  const transcriptEditorInput = document.getElementById("transcript-editor-input");
+  const editorActionsBar = document.getElementById("editor-actions-bar");
+  const applyEditedTranscriptBtn = document.getElementById("apply-edited-transcript-btn");
+  const cancelEditBtn = document.getElementById("cancel-edit-btn");
+
+  const transcriptPreviewBox = document.getElementById("transcript-preview-box");
+  const transcriptPreviewContent = document.getElementById("transcript-preview-content");
+  const editTranscriptSrcBtn = document.getElementById("edit-transcript-src-btn");
 
   const proceedBtn = document.getElementById("proceed-to-summarize-btn");
   const generateSummaryBtn = document.getElementById("generate-summary-btn");
@@ -73,6 +82,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const winnerModelName = document.getElementById("winner-model-name");
   const evalCasesList = document.getElementById("eval-cases-list");
 
+  function updateTranscriptPreview() {
+    const activeText = state.formattedTranscript || state.cleanTranscript || state.rawTranscript;
+    if (transcriptPreviewBox && transcriptPreviewContent) {
+      if (activeText && activeText.trim()) {
+        transcriptPreviewContent.textContent = activeText;
+        transcriptPreviewBox.classList.remove("hidden");
+      } else {
+        transcriptPreviewBox.classList.add("hidden");
+      }
+    }
+  }
+
   // Tab Navigation Handling
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
@@ -85,11 +106,22 @@ document.addEventListener("DOMContentLoaded", () => {
         targetPane.classList.add("active");
       }
 
+      if (tab.dataset.tab === "report") {
+        updateTranscriptPreview();
+      }
+
       if (tab.dataset.tab === "database") {
         fetchDatabaseReports();
       }
     });
   });
+
+  if (editTranscriptSrcBtn) {
+    editTranscriptSrcBtn.addEventListener("click", () => {
+      const consultTab = document.querySelector(".nav-tab[data-tab='consultation']");
+      if (consultTab) consultTab.click();
+    });
+  }
 
   // Audio File Selection & Drag/Drop
   if (dropZone) {
@@ -138,6 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
       state.rawTranscript = sampleTranscript;
       renderTranscriptDisplay("clean");
+      updateTranscriptPreview();
     });
   }
 
@@ -312,9 +345,70 @@ document.addEventListener("DOMContentLoaded", () => {
   if (rawTranscriptBtn) rawTranscriptBtn.addEventListener("click", () => renderTranscriptDisplay("raw"));
   if (cleanTranscriptBtn) cleanTranscriptBtn.addEventListener("click", () => renderTranscriptDisplay("clean"));
 
+  // Manual Transcript Editor / Paste Mode
+  if (editTranscriptToggleBtn) {
+    editTranscriptToggleBtn.addEventListener("click", () => {
+      if (transcriptEditorInput) {
+        transcriptEditorInput.value = state.rawTranscript || state.cleanTranscript || "";
+        transcriptDisplay.classList.add("hidden");
+        transcriptEditorInput.classList.remove("hidden");
+        if (editorActionsBar) editorActionsBar.classList.remove("hidden");
+        rawTranscriptBtn.classList.remove("active");
+        cleanTranscriptBtn.classList.remove("active");
+        editTranscriptToggleBtn.classList.add("active");
+        transcriptEditorInput.focus();
+      }
+    });
+  }
+
+  if (cancelEditBtn) {
+    cancelEditBtn.addEventListener("click", () => {
+      if (transcriptEditorInput) transcriptEditorInput.classList.add("hidden");
+      if (editorActionsBar) editorActionsBar.classList.add("hidden");
+      transcriptDisplay.classList.remove("hidden");
+      editTranscriptToggleBtn.classList.remove("active");
+      renderTranscriptDisplay("clean");
+    });
+  }
+
+  if (applyEditedTranscriptBtn) {
+    applyEditedTranscriptBtn.addEventListener("click", async () => {
+      const text = (transcriptEditorInput ? transcriptEditorInput.value : "").trim();
+      if (!text) {
+        showToast("Please enter transcript text.", "error");
+        return;
+      }
+      try {
+        const prepRes = await fetch("/api/preprocess", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: text })
+        });
+        if (!prepRes.ok) throw new Error("Preprocessing failed");
+        const data = await prepRes.json();
+        state.rawTranscript = text;
+        state.cleanTranscript = data.clean_transcript;
+        state.formattedTranscript = data.formatted_transcript;
+        state.dialogueTurns = data.dialogue_turns || [];
+        state.chunks = data.chunks || [];
+
+        if (transcriptEditorInput) transcriptEditorInput.classList.add("hidden");
+        if (editorActionsBar) editorActionsBar.classList.add("hidden");
+        transcriptDisplay.classList.remove("hidden");
+        editTranscriptToggleBtn.classList.remove("active");
+        renderTranscriptDisplay("clean");
+        updateTranscriptPreview();
+        showToast("Transcript formatted & ready for summarization!", "success");
+      } catch (e) {
+        showToast("Error processing dialogue: " + e.message, "error");
+      }
+    });
+  }
+
   // Proceed to Tab 2
   if (proceedBtn) {
     proceedBtn.addEventListener("click", () => {
+      updateTranscriptPreview();
       const reportTab = document.querySelector(".nav-tab[data-tab='report']");
       if (reportTab) reportTab.click();
     });
@@ -334,16 +428,83 @@ document.addEventListener("DOMContentLoaded", () => {
   if (generateSummaryBtn) {
     generateSummaryBtn.addEventListener("click", async () => {
       const activeTranscript = state.formattedTranscript || state.cleanTranscript || state.rawTranscript;
-      if (!activeTranscript) {
-        showToast("Please transcribe or record consultation audio first.", "error");
+      if (!activeTranscript || !activeTranscript.trim()) {
+        showToast("No transcript available. Load sample audio or enter text first.", "info");
+        if (reportViewContainer) {
+          reportViewContainer.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-comment-medical" style="color: var(--accent);"></i>
+              <h3>No Consultation Transcript Found</h3>
+              <p class="mt-2 text-muted">Please transcribe an audio file or click below to load pre-recorded consultation data.</p>
+              <div class="mt-3" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <button id="quick-load-sample-btn" class="btn btn-primary btn-sm">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> Load Sample Consultation & Summarize
+                </button>
+                <button id="go-to-tab1-btn" class="btn btn-outline btn-sm">
+                  <i class="fa-solid fa-microphone"></i> Go to Tab 1 (Audio / Input)
+                </button>
+              </div>
+            </div>
+          `;
+          const quickLoad = document.getElementById("quick-load-sample-btn");
+          if (quickLoad) {
+            quickLoad.addEventListener("click", () => {
+              if (loadSampleBtn) loadSampleBtn.click();
+              updateTranscriptPreview();
+              setTimeout(() => {
+                if (generateSummaryBtn) generateSummaryBtn.click();
+              }, 300);
+            });
+          }
+          const goToTab1 = document.getElementById("go-to-tab1-btn");
+          if (goToTab1) {
+            goToTab1.addEventListener("click", () => {
+              const t1 = document.querySelector(".nav-tab[data-tab='consultation']");
+              if (t1) t1.click();
+            });
+          }
+        }
         return;
       }
 
+      // Update transcript preview in Tab 2
+      updateTranscriptPreview();
+
+      // UI Loading state
+      generateSummaryBtn.disabled = true;
+      const originalBtnContent = generateSummaryBtn.innerHTML;
+      generateSummaryBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Generating ${escapeHtml(state.selectedModel)} Summary...`;
       summarySpinnerText.textContent = `Generating Clinical Summary using ${state.selectedModel}...`;
       summarySpinner.classList.remove("hidden");
 
-      const patientId = document.getElementById("patient-id-input").value || "PAT-2026-88";
-      const doctorInfo = document.getElementById("doctor-info-input").value || "Dr. Alexander Fleming, MD";
+      // Show animated loading card inside report container
+      if (reportViewContainer) {
+        reportViewContainer.innerHTML = `
+          <div class="report-loading-card">
+            <div class="spinner"></div>
+            <h3 class="mt-3" style="color: var(--text-main); font-size: 20px;">
+              Generating Clinical Summary & SOAP Note
+            </h3>
+            <p class="text-muted mt-2">
+              Executing <strong>${escapeHtml(state.selectedModel)}</strong> Transformer Model inference...
+            </p>
+            <div class="loading-steps">
+              <div class="loading-step-item active">
+                <i class="fa-solid fa-check"></i> Dialogue Tokenized
+              </div>
+              <div class="loading-step-item active">
+                <i class="fa-solid fa-gear fa-spin"></i> Neural Abstractive Summarization
+              </div>
+              <div class="loading-step-item">
+                <i class="fa-solid fa-notes-medical"></i> Fact-Preserving SOAP Extraction
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      const patientId = document.getElementById("patient-id-input")?.value || "PAT-2026-88";
+      const doctorInfo = document.getElementById("doctor-info-input")?.value || "Dr. Alexander Fleming, MD";
 
       try {
         const response = await fetch("/api/summarize", {
@@ -359,7 +520,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.detail || "Summarization API error.");
+          throw new Error(errData.detail || `Server error (${response.status})`);
         }
 
         const data = await response.json();
@@ -370,16 +531,36 @@ document.addEventListener("DOMContentLoaded", () => {
         renderClinicalReport(data);
 
         // Update Metadata box
-        document.getElementById("summary-meta-box").classList.remove("hidden");
-        document.getElementById("meta-model-name").textContent = data.selected_model;
-        document.getElementById("meta-chunk-method").textContent = data.summarization_method;
-        document.getElementById("meta-cons-id").textContent = data.consultation_id;
+        const metaBox = document.getElementById("summary-meta-box");
+        if (metaBox) metaBox.classList.remove("hidden");
+        const metaModel = document.getElementById("meta-model-name");
+        if (metaModel) metaModel.textContent = data.selected_model;
+        const metaChunk = document.getElementById("meta-chunk-method");
+        if (metaChunk) metaChunk.textContent = data.summarization_method;
+        const metaCons = document.getElementById("meta-cons-id");
+        if (metaCons) metaCons.textContent = data.consultation_id;
 
         showToast("Clinical report generated successfully!", "success");
 
       } catch (err) {
         showToast("Summarization Error: " + err.message, "error");
+        if (reportViewContainer) {
+          reportViewContainer.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-triangle-exclamation" style="color: var(--danger); font-size: 40px; margin-bottom: 12px;"></i>
+              <h3 style="color: var(--danger);">Summarization Failed</h3>
+              <p class="text-muted mt-2" style="max-width: 480px; margin: 8px auto;">${escapeHtml(err.message)}</p>
+              <button id="retry-summary-btn" class="btn btn-primary mt-3">
+                <i class="fa-solid fa-rotate-right"></i> Retry Generation
+              </button>
+            </div>
+          `;
+          const retryBtn = document.getElementById("retry-summary-btn");
+          if (retryBtn) retryBtn.addEventListener("click", () => generateSummaryBtn.click());
+        }
       } finally {
+        generateSummaryBtn.disabled = false;
+        generateSummaryBtn.innerHTML = originalBtnContent;
         summarySpinner.classList.add("hidden");
       }
     });

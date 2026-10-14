@@ -71,8 +71,16 @@ def health_check():
     return {
         "status": "online",
         "timestamp": datetime.now().isoformat(),
-        "database": os.path.exists(str(database.DB_PATH))
+        "database": os.path.exists(str(database.DB_PATH)),
+        "bart_loaded": bart_summarizer.model is not None,
+        "t5_loaded": t5_summarizer.model is not None
     }
+
+@app.on_event("startup")
+async def startup_warmup():
+    """Warm up default BART summarizer in background thread so user requests don't hang on first inference."""
+    logger.info("[Startup] Pre-warming BART summarization model in background...")
+    _executor.submit(bart_summarizer._load_model)
 
 # Render Front-end Web Interface
 @app.get("/", response_class=FileResponse)

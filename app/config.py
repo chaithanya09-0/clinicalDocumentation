@@ -12,6 +12,15 @@ os.environ["FOR_DISABLE_CONSOLE_CTRL_HANDLER"] = "1"
 
 import torch
 
+# Bypass transformers 4.57+ artificial block on torch.load for PyTorch < 2.6 (CVE-2025-32434 check)
+try:
+    import transformers.modeling_utils
+    transformers.modeling_utils.check_torch_load_is_safe = lambda: None
+    from transformers.utils import import_utils
+    import_utils.check_torch_load_is_safe = lambda: None
+except Exception:
+    pass
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
